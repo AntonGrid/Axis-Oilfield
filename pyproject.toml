@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "axis-oilfield"
+version = "0.1.0"
+description = "Axis Protocol domain profile for oil & gas MTR inventory chain-of-custody (пересортица, distributed pad storage, custody audit)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+dependencies = []
+
+[project.optional-dependencies]
+# The trust layer (Ed25519 signing/verification) used by examples/.
+core = ["axis-core @ git+https://github.com/AntonGrid/Axis-core.git"]
+dev = ["pytest>=7"]
+
+[project.urls]
+Source = "https://github.com/AntonGrid/Axis-Oilfield"
+Ecosystem = "https://github.com/AntonGrid/Axis-protocol"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

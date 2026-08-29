@@ -52,13 +52,16 @@ Axis-Oilfield/
 ## Quick start
 
 ```bash
-# 1. Axis Core (the trust implementation) on PYTHONPATH
-pip install -e ../Axis-core
+# 1. Install the domain package
+pip install -e .                    # or: pip install -e ".[dev]"
 
-# 2. Run the end-to-end demo
+# 2. Axis Core (the trust implementation) for the signing demo
+pip install -e ../Axis-core         # or: pip install -e ".[core]"
+
+# 3. Run the end-to-end demo
 python examples/oilfield_inventory.py
 
-# 3. Run the domain-logic tests
+# 4. Run the domain-logic tests
 python -m pytest tests/ -q
 ```
 
