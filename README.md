@@ -40,6 +40,8 @@ storekeeper's scanner/phone, the "event" is an inventory movement, and the
 ```
 Axis-Oilfield/
 ├── docs/SPECIFICATION.md     # full domain specification
+├── docs/PITCH.md             # short pitch for management (RU)
+├── docs/presentation/        # management deck: index.html + PDF
 ├── src/oilfield/             # reusable domain logic (pure Python)
 │   ├── model.py              # items, locations, events, snapshots
 │   ├── policies.py           # SKU check, FEFO, temperature, certificates
@@ -48,6 +50,9 @@ Axis-Oilfield/
 │   └── oilfield_inventory.py # end-to-end demo on Axis Core (Ed25519 signing)
 └── tests/                    # pytest suite for the domain logic
 ```
+
+**Management deck:** open `docs/presentation/index.html` in a browser
+(offline, keyboard/arrow navigation) or send `Axis-Oilfield-pitch.pdf`.
 
 ## Quick start
 

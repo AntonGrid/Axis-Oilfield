@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Axis-Oilfield — цифровой контроль склада МТР</title>
+<style>
+  :root {
+    --bg: #0d1526;
+    --panel: #131e33;
+    --line: #24334f;
+    --ink: #e8eef7;
+    --muted: #93a4bd;
+    --accent: #f0a030;
+    --accent2: #4cc3ff;
+    --ok: #5fd18b;
+    --bad: #ff6b6b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(1200px 700px at 80% -10%, #16233c 0%, var(--bg) 55%);
+    color: var(--ink);
+    font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  #deck { height: 100vh; position: relative; }
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 6vh 7vw;
+    opacity: 0; transform: translateX(40px);
+    transition: opacity .45s ease, transform .45s ease;
+    pointer-events: none;
+  }
+  .slide.active { opacity: 1; transform: none; pointer-events: auto; }
+  .slide .step { opacity: 0; transform: translateY(18px); transition: all .5s ease; }
+  .slide.active .step { opacity: 1; transform: none; }
+
+  /* ── typography ── */
+  .kicker { font-size: 13px; letter-spacing: .28em; text-transform: uppercase; color: var(--accent); margin-bottom: 18px; }
+  h1 { font-size: clamp(30px, 4.6vw, 58px); line-height: 1.08; font-weight: 700; letter-spacing: -.01em; }
+  h2 { font-size: clamp(24px, 3.2vw, 40px); font-weight: 700; margin-bottom: 26px; }
+  .sub { color: var(--muted); font-size: clamp(15px, 1.5vw, 19px); margin-top: 14px; line-height: 1.5; max-width: 60ch; }
+  .accent { color: var(--accent); }
+
+  /* ── cards / tables ── */
+  .grid { display: grid; gap: 14px; }
+  .g2 { grid-template-columns: repeat(2, 1fr); }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  .g4 { grid-template-columns: repeat(4, 1fr); }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 18px 20px;
+  }
+  .card h3 { font-size: 16px; margin-bottom: 8px; }
+  .card p, .card li { color: var(--muted); font-size: 14px; line-height: 1.5; }
+  .card ul { padding-left: 18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th { color: var(--muted); text-align: left; font-weight: 600; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  td { padding: 12px 14px; border-bottom: 1px solid rgba(36,51,79,.55); vertical-align: top; }
+  td:first-child { font-weight: 600; }
+
+  /* flow */
+  .flow { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; }
+  .flow .node {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 16px; font-size: 13px; text-align: center; flex: 1 1 120px;
+  }
+  .flow .node b { display: block; color: var(--accent2); margin-bottom: 4px; font-size: 14px; }
+  .flow .arrow { align-self: center; color: var(--accent); font-size: 20px; }
+
+  .big { font-size: clamp(40px, 6vw, 76px); font-weight: 800; color: var(--accent); line-height: 1; }
+  .big-num { font-size: clamp(28px, 3.4vw, 44px); font-weight: 800; color: var(--accent); }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+
+  /* footer / nav */
+  #nav { position: fixed; bottom: 18px; left: 0; right: 0; display: flex; justify-content: center; gap: 10px; z-index: 10; }
+  #nav button {
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 14px;
+  }
+  #nav button:hover { border-color: var(--accent); color: var(--accent); }
+  #dots { display: flex; gap: 8px; align-items: center; }
+  #dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--line); cursor: pointer; transition: background .2s; }
+  #dots span.on { background: var(--accent); width: 22px; border-radius: 5px; }
+  #counter { position: fixed; top: 18px; right: 22px; color: var(--muted); font-size: 13px; z-index: 10; }
+
+  @media print {
+    body { overflow: visible; background: #fff; color: #111; }
+    .slide { position: relative; opacity: 1; transform: none; page-break-after: always; height: 100vh; pointer-events: auto; }
+    .slide .step { opacity: 1; transform: none; }
+    #nav, #counter { display: none; }
+    .card, .flow .node { background: #f4f6f9; border-color: #ccd4de; }
+    .kicker { color: #b26a00; }
+  }
+</style>
+</head>
+
+<div id="deck">
+
+  <!-- 1. Title -->
+  <section class="slide active">
+    <div class="step kicker">Пилот · цифровизация склада МТР</div>
+    <div class="step"><h1>Контроль материалов от склада<br>до куста — <span class="accent">без споров и потерь</span></h1></div>
+    <div class="step sub">Подписанная прослеживаемость каждой единицы МТР: приёмка, хранение, перемещение, выдача, инвентаризация. Пересортица блокируется в момент сканирования.</div>
+    <div class="step sub" style="margin-top:26px"><b style="color:var(--accent)">Axis-Oilfield</b> · пилотное предложение · 2 недели до первого результата</div>
+  </section>
+
+  <!-- 2. Problems -->
+  <section class="slide">
+    <div class="step kicker">Ситуация</div>
+    <div class="step"><h2>С какими болями живёт склад сегодня</h2></div>
+    <div class="step grid g2">
+      <div class="card"><h3 class="bad">Пересортица</h3><p>Факт расходится с учётом. Находится при инвентаризации — когда потери уже произошли.</p></div>
+      <div class="card"><h3 class="bad">Кусты далеко</h3><p>Десятки площадок за сотни километров. Никто не знает, что где лежит — поиск «наугад».</p></div>
+      <div class="card"><h3 class="bad">Нет аудит-следа</h3><p>Споры по списаниям и «потеряшкам» без независимых доказательств.</p></div>
+      <div class="card"><h3 class="bad">Оффлайн-площадки</h3><p>На кустах нестабильный интернет — бумага остаётся единственным учётом.</p></div>
+    </div>
+  </section>
+
+  <!-- 3. Cost -->
+  <section class="slide">
+    <div class="step kicker">Цена проблемы</div>
+    <div class="step"><h2>Чем это обходится компании</h2></div>
+    <div class="step grid g2">
+      <div class="card"><div class="big-num">Брак на монтаже</div><p>«Не та труба / не тот реагент» на кусте → ремонт, простой скважин.</p></div>
+      <div class="card"><div class="big-num">Дублирующие закупки</div><p>Покупаем то, что уже где-то лежит — потому что не видим карту.</p></div>
+      <div class="card"><div class="big-num">Недели инвентаризации</div><p>Ручной пересчёт вместо сканирования; расхождения по итогам.</p></div>
+      <div class="card"><div class="big-num">Споры и потери</div><p>Нецелевое использование МТР и «потеряшки» без доказательств.</p></div>
+    </div>
+  </section>
+
+  <!-- 4. Solution -->
+  <section class="slide">
+    <div class="step kicker">Решение</div>
+    <div class="step"><h2>Подписанная прослеживаемость каждой единицы</h2></div>
+    <div class="step flow">
+      <div class="node"><b>Метка</b>QR на каждой единице МТР и на каждом месте хранения</div>
+      <div class="arrow">→</div>
+      <div class="node"><b>Сканирование</b>телефон кладовщика на каждом шаге</div>
+      <div class="arrow">→</div>
+      <div class="node"><b>Подпись</b>событие подписано: кто · что · когда</div>
+      <div class="arrow">→</div>
+      <div class="node"><b>Политики</b>сверка с нарядом/ТТН · FEFO · сертификаты</div>
+      <div class="arrow">→</div>
+      <div class="node"><b>Карта</b>«что где лежит» по всем кустам</div>
+    </div>
+    <div class="step sub" style="margin-top:22px">Пересортица блокируется <b>в момент сканирования</b>, а не находится через квартал.</div>
+  </section>
+
+  <!-- 5. Flow -->
+  <section class="slide">
+    <div class="step kicker">Как это работает</div>
+    <div class="step"><h2>Жизненный цикл единицы МТР</h2></div>
+    <div class="step flow">
+      <div class="node"><b>Приход</b>ТТН + сертификат</div>
+      <div class="arrow">→</div>
+      <div class="node"><b>Приёмка</b>сверка артикула</div>
+      <div class="arrow">→</div>
+      <div class="node"><b>Хранение</b>куст → контейнер → ячейка</div>
+      <div class="arrow">→</div>
+      <div class="node"><b>Перемещение</b>на куст, подпись custody</div>
+      <div class="arrow">→</div>
+      <div class="node"><b>Выдача</b>по наряду, сверка</div>
+      <div class="arrow">→</div>
+      <div class="node"><b>Инвентаризация</b>скан → отчёт расхождений</div>
+    </div>
+    <div class="step sub" style="margin-top:22px">Каждое событие подписано и неизменяемо — <b>audit-след без споров</b>. Работает офлайн: подпись на кусте без интернета, синхронизация при возврате на базу.</div>
+  </section>
+
+<body>
+<div id="counter">1 / 9</div>
+
+
+  <!-- 6. Benefits -->
+  <section class="slide">
+    <div class="step kicker">Результат</div>
+    <div class="step"><h2>Что получает компания</h2></div>
+    <div class="step grid g3">
+      <div class="card"><div class="big-num ok">−</div><h3 class="ok">Пересортица блокируется</h3><p>в момент сканирования — на входе и на выдаче</p></div>
+      <div class="card"><div class="big-num ok">×10</div><h3 class="ok">Быстрее инвентаризация</h3><p>скан вместо ручного пересчёта</p></div>
+      <div class="card"><div class="big-num ok">10 с</div><h3 class="ok">Поиск «где лежит»</h3><p>карта кустов вместо объезда площадок</p></div>
+      <div class="card"><div class="big-num ok">Аудит</div><h3 class="ok">Без споров</h3><p>кто · что · когда — подписано и неизменяемо</p></div>
+      <div class="card"><div class="big-num ok">Офлайн</div><h3 class="ok">Кусты без интернета</h3><p>подпись локально, синхронизация позже</p></div>
+      <div class="card"><div class="big-num ok">Меньше потерь</div><h3 class="ok">И дублей закупок</h3><p>видно по единой карте</p></div>
+    </div>
+  </section>
+
+  <!-- 7. Pilot -->
+  <section class="slide">
+    <div class="step kicker">Пилот</div>
+    <div class="step"><h2>Дёшево, быстро, без замены 1С</h2></div>
+    <div class="step grid g2">
+      <div class="card"><h3>Что берём</h3><ul>
+        <li>1–3 «болевые» позиции (например, НКТ, реагенты)</li>
+        <li>телефон кладовщика + QR-стикеры</li>
+        <li>2 недели до первого отчёта руководству</li>
+      </ul></div>
+      <div class="card"><h3>Что получаем</h3><ul>
+        <li>отчёт: пересортица/расхождения по позициям</li>
+        <li>карта «что где лежит» по кустам</li>
+        <li>аудит-след всех движений</li>
+      </ul></div>
+    </div>
+    <div class="step sub" style="margin-top:20px"><b class="ok">Важно:</b> не заменяет 1С — работает как параллельный контур физического подтверждения; мост к 1С — второй этап.</div>
+  </section>
+
+  <!-- 8. Tech -->
+  <section class="slide">
+    <div class="step kicker">Для ИТ-блока</div>
+    <div class="step"><h2>Технология — коротко</h2></div>
+    <div class="step grid g2">
+      <div class="card"><h3>Открытый стандарт</h3><p>Axis Protocol, Apache 2.0 — доменно-агностичный слой доверия. Подписи Ed25519, события неизменяемы.</p></div>
+      <div class="card"><h3>Схема</h3><p>скан → подпись → событие → политика → аномалия/отчёт. Логика домена — чистый Python, 15 автотестов.</p></div>
+      <div class="card"><h3>Безопасность</h3><p>ключ подписи на устройстве кладовщика; сервер только проверяет. Оффлайн-подпись на кустах.</p></div>
+      <div class="card"><h3>Интеграция</h3><p>1С остаётся системой учёта; Axis добавляет физическое подтверждение. Мост (OData/выгрузка) — этап 2.</p></div>
+    </div>
+  </section>
+
+  <!-- 9. Next steps -->
+  <section class="slide">
+    <div class="step kicker">Следующие шаги</div>
+    <div class="step"><h2>Как начать</h2></div>
+    <div class="step grid g4">
+      <div class="card"><div class="big-num">1</div><p>Выбрать пилотные позиции и замерить текущие потери</p></div>
+      <div class="card"><div class="big-num">2</div><p>QR-метки + телефон кладовщика со сканером</p></div>
+      <div class="card"><div class="big-num">3</div><p>Через 2 недели — отчёт: пересортица, расхождения, карта кустов</p></div>
+      <div class="card"><div class="big-num">4</div><p>Решение о масштабировании на все склады и кусты</p></div>
+    </div>
+    <div class="step sub" style="margin-top:24px">Демо работает уже сегодня — готовы показать на ваших позициях.</div>
+  </section>
+
+</div>
+
+<div id="nav">
+  <button id="prev">← Назад</button>
+  <div id="dots"></div>
+  <button id="next">Вперёд →</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll(".slide");
+  const dots = document.getElementById("dots");
+  const counter = document.getElementById("counter");
+  let i = 0;
+
+  slides.forEach((_, n) => {
+    const d = document.createElement("span");
+    d.addEventListener("click", () => go(n));
+    dots.appendChild(d);
+  });
+
+  function go(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, k) => s.classList.toggle("active", k === i));
+    [...dots.children].forEach((d, k) => d.classList.toggle("on", k === i));
+    counter.textContent = `${i + 1} / ${slides.length}`;
+  }
+  document.getElementById("next").addEventListener("click", () => go(i + 1));
+  document.getElementById("prev").addEventListener("click", () => go(i - 1));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowRight" || e.key === " ") go(i + 1);
+    if (e.key === "ArrowLeft") go(i - 1);
+  });
+  go(0);
+</script>
+</body>
+</html>
