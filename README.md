@@ -43,11 +43,15 @@ Axis-Oilfield/
 ├── docs/PITCH.md             # short pitch for management (RU)
 ├── docs/presentation/        # management deck: index.html + PDF
 ├── src/oilfield/             # reusable domain logic (pure Python)
-│   ├── model.py              # items, locations, events, snapshots
+│   ├── model.py              # items, locations, events, certificates, snapshots
 │   ├── policies.py           # SKU check, FEFO, temperature, certificates
-│   └── custody.py            # chains, custody-break detection, inventory reports
+│   ├── custody.py            # registry: apply events, «куст map», anomalies,
+│   │                         #   signed inventory snapshots, reports
+│   ├── sync.py               # offline outbox: sign at the pad, sync later
+│   └── keeper.py             # Axis Core bridge: Storekeeper (sign) / Gateway (verify)
 ├── examples/
-│   └── oilfield_inventory.py # end-to-end demo on Axis Core (Ed25519 signing)
+│   ├── oilfield_inventory.py # end-to-end demo on Axis Core (Ed25519 signing)
+│   └── oilfield_daily.py     # a real pad-storekeeper day (offline-first + sync)
 └── tests/                    # pytest suite for the domain logic
 ```
 
@@ -63,11 +67,12 @@ pip install -e .                    # or: pip install -e ".[dev]"
 # 2. Axis Core (the trust implementation) for the signing demo
 pip install -e ../Axis-core         # or: pip install -e ".[core]"
 
-# 3. Run the end-to-end demo
-python examples/oilfield_inventory.py
+# 3. Run the end-to-end demos
+python examples/oilfield_inventory.py   # full chain-of-custody scenario
+python examples/oilfield_daily.py       # a storekeeper's day (offline + sync)
 
 # 4. Run the domain-logic tests
-python -m pytest tests/ -q
+python -m pytest tests/ -q              # 30 tests
 ```
 
 The demo covers: signed receipt → placement into addressable storage →

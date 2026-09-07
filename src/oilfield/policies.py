@@ -15,6 +15,10 @@ CHEMICAL_TEMP_MAX = 25.0
 #: SKUs that always require a quality certificate.
 CERTIFICATE_REQUIRED_SKUS = {"HKT", "UKT", "REAGENT", "UECN"}
 
+#: SKUs sensitive to temperature (chemicals). When a ``temp_c`` fact is
+#: supplied, storing/moving them outside the band is rejected.
+TEMPERATURE_SENSITIVE_SKUS = {"REAGENT", "UECN"}
+
 
 def sku_matches(scanned_sku: str, expected_sku: str) -> Tuple[bool, str]:
     """Пересортица gate: the scanned SKU must equal the document's SKU."""
@@ -81,6 +85,7 @@ def check_event(
     has_work_order: bool = True,
     item_expiry: Dict[str, str] = None,
     candidate: str = "",
+    temp_c: float = None,
 ) -> Tuple[bool, str]:
     """Run the full rulebook for one event payload (order matters)."""
     sku = str(event.get("sku", ""))
@@ -91,6 +96,13 @@ def check_event(
         return False, f"sku_mismatch: scanned {sku!r} != expected {expected_sku!r}"
     if not certificate_required(sku, cert_ids)[0]:
         return certificate_required(sku, cert_ids)
+    # Temperature-sensitive SKUs may not be stored/moved out of the band.
+    if temp_c is not None and event_type in ("receive", "store", "return"):
+        for prefix in TEMPERATURE_SENSITIVE_SKUS:
+            if sku.upper().startswith(prefix):
+                ok, reason = temperature_in_range(temp_c)
+                if not ok:
+                    return ok, reason
     # The target of receive/store/return is addressable storage; issue goes to
     # a well/crew, not a cell.
     if event_type in ("receive", "store", "return") and not location_known(

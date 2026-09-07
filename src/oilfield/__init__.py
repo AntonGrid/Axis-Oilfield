@@ -11,12 +11,22 @@ Modules:
   custody breaks, produce inventory discrepancy reports.
 """
 
-from oilfield.custody import InventoryRegistry
-from oilfield.model import InventoryEvent, Item, Location, Site
+from oilfield.custody import InventoryRegistry, EventOutcome
+from oilfield.model import (
+    Certificate,
+    InventoryEvent,
+    InventorySnapshot,
+    Item,
+    Location,
+    Site,
+)
 
 __all__ = [
+    "Certificate",
+    "EventOutcome",
     "InventoryEvent",
     "InventoryRegistry",
+    "InventorySnapshot",
     "Item",
     "Location",
     "Site",
