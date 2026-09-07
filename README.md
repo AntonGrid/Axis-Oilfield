@@ -50,6 +50,8 @@ Axis-Oilfield/
 │   ├── sync.py               # offline outbox: sign at the pad, sync later
 │   ├── keeper.py             # Axis Core bridge: Storekeeper (sign) / Gateway (verify)
 │   ├── qrkit.py              # QR label generation for items & locations
+│   ├── intel.py              # PoI: site accuracy, demand profile, signed
+│   │                         #   contributions, aggregation, rebalance signals
 │   ├── cli.py                # the `oilfield` command (see below)
 │   └── gateway.py            # HTTP gateway for phone scanner (web/)
 ├── web/                      # phone scanner UI (camera QR + offline outbox)
@@ -76,7 +78,7 @@ python examples/oilfield_inventory.py   # full chain-of-custody scenario
 python examples/oilfield_daily.py       # a storekeeper's day (offline + sync)
 
 # 4. Run the domain-logic tests
-python -m pytest tests/ -q              # 31 tests
+python -m pytest tests/ -q              # 36 tests
 ```
 
 The demo covers: signed receipt → placement into addressable storage →
@@ -133,6 +135,20 @@ oilfield serve --port 8080        # http://<IP-ПК>:8080 — страница �
 
 Проверено end-to-end: `POST /event` с подписью → `accepted: true`;
 повтор того же события → `replay` отклонён.
+
+## PoI: точность площадок и прогноз (L3-сигналы)
+
+```bash
+oilfield intel accuracy                        # честность учёта по снэпшотам
+oilfield intel demand --sku HKT-73             # потребление по кустам
+oilfield intel contribution --site PAD-12 --keeper Иван --out /tmp/contrib.json
+oilfield intel aggregate /tmp/*.json           # взвешенное по репутации
+oilfield intel rebalance /tmp/*.json           # где ожидается дефицит
+```
+
+Все выходы — **сигналы, не решения** (конституция C-1): точность площадки
+считается из подписанных снэпшотов инвентаризации; вклады подписываются
+Ed25519 (тот же формат Axis Core); ребаланс лишь предлагает перемещение.
 
 ## Relation to the ecosystem
 

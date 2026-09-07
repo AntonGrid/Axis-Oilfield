@@ -418,6 +418,90 @@ def cmd_serve(store, args) -> None:
     serve(store.path, host=args.host, port=args.port)
 
 
+# ─────────────────────────────── intel (PoI) ────────────────────────────────
+
+def cmd_intel_accuracy(store, args) -> None:
+    store.load()
+    reg = store.rebuild()
+    from oilfield.intel import site_accuracy
+
+    sites = [args.site] if args.site else sorted(reg.sites)
+    for s in sites:
+        a = site_accuracy(reg, s)
+        if a is None:
+            print(f"  {s}: нет подписанных снэпшотов — точность неизвестна")
+        else:
+            print(f"  {s}: точность {a['accuracy']:.1%} "
+                  f"(снэпшотов локаций: {a['locations_checked']}, единиц: {a['units_checked']})")
+
+
+def cmd_intel_demand(store, args) -> None:
+    store.load()
+    reg = store.rebuild()
+    from oilfield.intel import demand_profile
+
+    skus = [args.sku] if args.sku else sorted({i.sku for i in reg.items.values()})
+    for sku in skus:
+        prof = demand_profile(reg, sku, days=args.days)
+        if not prof:
+            print(f"  {sku}: выдач за {args.days} дн. нет")
+            continue
+        for site, p in sorted(prof.items()):
+            print(f"  {sku} @ {site}: выдано {p['issued']}, "
+                  f"~{p['daily_avg']}/день → на {p['horizon_need']} на горизонте")
+
+
+def cmd_intel_contribution(store, args) -> None:
+    store.load()
+    reg = store.rebuild()
+    from oilfield.intel import build_contribution
+    import json
+
+    key, actor = _keeper(store, args.keeper)
+    c = build_contribution(reg, site_id=args.site, actor=actor, key=key,
+                           days=args.days, skus=([args.sku] if args.sku else None))
+    payload = c.to_dict()
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False, indent=1)
+        print(f"✅ вклад {args.site} подписан → {args.out}")
+    else:
+        print(json.dumps(payload, ensure_ascii=False, indent=1))
+
+
+def cmd_intel_aggregate(store, args) -> None:
+    from oilfield.intel import SiteContribution, aggregate
+    import json
+
+    cons = []
+    for path in args.files:
+        with open(path, encoding="utf-8") as fh:
+            cons.append(SiteContribution.from_dict(json.load(fh)))
+    for sku, info in sorted(aggregate(cons).items()):
+        sites = ", ".join(f"{k}: {v}" for k, v in info["sites"].items())
+        print(f"  {sku}: взвешенное за период {info['weighted_period_qty']} | {sites}")
+
+
+def cmd_intel_rebalance(store, args) -> None:
+    store.load()
+    reg = store.rebuild()
+    from oilfield.intel import SiteContribution, rebalance_suggestions
+    import json
+
+    cons = []
+    for path in args.files:
+        with open(path, encoding="utf-8") as fh:
+            cons.append(SiteContribution.from_dict(json.load(fh)))
+    sugg = rebalance_suggestions(reg, cons)
+    if not sugg:
+        print("  ✅ дефицитов по прогнозу нет")
+        return
+    for s in sugg:
+        print(f"  ⚠ {s['site']} {s['sku']}: в наличии {s['available']}, "
+              f"прогноз {s['forecast_need']} → дефицит {s['deficit']}")
+
+
+
 
 # ─────────────────────────────── parser & main ──────────────────────────────
 
@@ -503,6 +587,21 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("serve", help="HTTP-шлюз для сканов с телефона")
     sp.add_argument("--host", default="0.0.0.0"); sp.add_argument("--port", type=int, default=8080)
     sp.set_defaults(fn=cmd_serve)
+
+    sp = sub.add_parser("intel", help="PoI: точность/прогноз/вклады площадок")
+    a = sp.add_subparsers(dest="action", required=True)
+    ap = a.add_parser("accuracy"); ap.add_argument("--site", default=None)
+    ap.set_defaults(fn=cmd_intel_accuracy)
+    ap = a.add_parser("demand"); ap.add_argument("--sku", default=None)
+    ap.add_argument("--days", type=int, default=30); ap.set_defaults(fn=cmd_intel_demand)
+    ap = a.add_parser("contribution"); ap.add_argument("--site", required=True)
+    ap.add_argument("--keeper", required=True); ap.add_argument("--sku", default=None)
+    ap.add_argument("--days", type=int, default=30); ap.add_argument("--out", default=None)
+    ap.set_defaults(fn=cmd_intel_contribution)
+    ap = a.add_parser("aggregate"); ap.add_argument("files", nargs="+")
+    ap.set_defaults(fn=cmd_intel_aggregate)
+    ap = a.add_parser("rebalance"); ap.add_argument("files", nargs="+")
+    ap.set_defaults(fn=cmd_intel_rebalance)
 
     leaf = {"report": cmd_report, "find": cmd_find, "at": cmd_loc,
             "hist": cmd_hist, "summary": cmd_summary}
