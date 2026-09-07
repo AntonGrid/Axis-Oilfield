@@ -150,6 +150,17 @@ oilfield intel rebalance /tmp/*.json           # где ожидается де�
 считается из подписанных снэпшотов инвентаризации; вклады подписываются
 Ed25519 (тот же формат Axis Core); ребаланс лишь предлагает перемещение.
 
+## Выгрузка для 1С / Excel
+
+```bash
+oilfield export balances --out остатки.csv     # остатки МТР по площадкам
+oilfield export audit --out след.csv           # аудит-след: кто/что/когда
+oilfield export peresortica --out расхождения.csv  # по подписанным снэпшотам
+```
+
+CSV с UTF-8 BOM (открывается в Excel), разделитель `;`. 1С остаётся учётной
+системой — Axis-Oilfield даёт физическое подтверждение и отчёты для сверки.
+
 ## Relation to the ecosystem
 
 | Layer | Repository | Role here |

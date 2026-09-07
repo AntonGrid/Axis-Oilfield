@@ -501,6 +501,53 @@ def cmd_intel_rebalance(store, args) -> None:
               f"прогноз {s['forecast_need']} → дефицит {s['deficit']}")
 
 
+def cmd_export(store, args) -> None:
+    """Export data for 1C / accounting (CSV with UTF-8 BOM, Excel-friendly)."""
+    store.load()
+    reg = store.rebuild()
+    import csv
+
+    def _write(path, header, rows):
+        with open(path, "w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.writer(fh, delimiter=";")
+            w.writerow(header)
+            w.writerows(rows)
+        print(f"✅ {path} ({len(rows)} строк)")
+
+    if args.action == "balances":
+        # «Остатки МТР» по площадкам: SKU, сайт, адрес, серия/партия, кол-во.
+        rows = []
+        for item in reg.items.values():
+            if not item.location or item.is_issued:
+                continue
+            rows.append([item.sku, item.location.split(":")[0], item.location,
+                         item.serial_no or "", item.batch_no or "", item.qty,
+                         ";".join(item.cert_ids)])
+        _write(args.out, ["SKU", "Площадка", "Адрес", "Серия", "Партия",
+                          "Кол-во", "Сертификаты"], rows)
+    elif args.action == "audit":
+        # Аудит-след: кто, что, когда — для сверки с 1С и руководством.
+        rows = []
+        for e in reg.events:
+            rows.append([e.ts[:19], e.event_type, e.item_id, e.sku,
+                         e.from_ref, e.to_ref, e.actor, e.qty])
+        _write(args.out, ["Время", "Событие", "Позиция", "SKU", "Откуда",
+                          "Куда", "Кладовщик(pub)", "Кол-во"], rows)
+    elif args.action == "peresortica":
+        # Сводка расхождений по последним подписанным снэпшотам всех локаций.
+        rows = []
+        for loc in sorted(reg.locations):
+            for r in reg.inventory_report(loc):
+                if "error" in r:
+                    continue
+                rows.append([loc, r.get("sku", ""), r.get("item_id", ""),
+                             r.get("expected", ""), r.get("actual", ""),
+                             r.get("diff", ""), r.get("anomaly", "diff")])
+        _write(args.out, ["Адрес", "SKU", "Позиция", "Ожидалось", "Факт",
+                          "Разница", "Тип"], rows)
+
+
+
 
 
 # ─────────────────────────────── parser & main ──────────────────────────────
@@ -602,6 +649,15 @@ def build_parser() -> argparse.ArgumentParser:
     ap.set_defaults(fn=cmd_intel_aggregate)
     ap = a.add_parser("rebalance"); ap.add_argument("files", nargs="+")
     ap.set_defaults(fn=cmd_intel_rebalance)
+
+    sp = sub.add_parser("export", help="выгрузка для 1С/Excel (CSV)")
+    a = sp.add_subparsers(dest="action", required=True)
+    for name, help_ in [("balances", "остатки МТР по площадкам"),
+                        ("audit", "аудит-след событий"),
+                        ("peresortica", "расхождения инвентаризаций")]:
+        ap = a.add_parser(name, help=help_)
+        ap.add_argument("--out", default=f"{name}.csv")
+        ap.set_defaults(fn=cmd_export)
 
     leaf = {"report": cmd_report, "find": cmd_find, "at": cmd_loc,
             "hist": cmd_hist, "summary": cmd_summary}
