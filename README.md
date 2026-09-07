@@ -72,12 +72,38 @@ python examples/oilfield_inventory.py   # full chain-of-custody scenario
 python examples/oilfield_daily.py       # a storekeeper's day (offline + sync)
 
 # 4. Run the domain-logic tests
-python -m pytest tests/ -q              # 30 tests
+python -m pytest tests/ -q              # 31 tests
 ```
 
 The demo covers: signed receipt → placement into addressable storage →
 cross-pad move → **пересортица blocked by policy** → custody-break anomaly →
 inventory discrepancy report → offline signing with late sync.
+
+## Daily CLI (для работы на складе)
+
+```bash
+# один раз: справочники
+oilfield init
+oilfield site add WH-01 "Склад" --region База
+oilfield site add PAD-12 "Куст 12" --region Север
+oilfield loc  add WH-01:ряд-А:стеллаж-1:яч-1 --site WH-01 --kind cell
+oilfield item add tube-01 --sku HKT-73 --serial SN-88213 --batch B-2201 --cert cert-7732
+oilfield keeper add "Иван"
+
+# каждый день (всё подписывается Ed25519)
+oilfield receive tube-01 WH-01:ряд-А:стеллаж-1:яч-1 --keeper Иван   # приёмка
+oilfield move   tube-01 PAD-12:конт-Б:стеллаж-3:яч-7  --keeper Иван   # на куст
+oilfield issue  tube-02 well-8 --expected-sku HKT-73 --keeper Иван     # выдача
+oilfield snapshot PAD-12:конт-Б:стеллаж-3:яч-7 --item tube-01 --keeper Иван
+oilfield report PAD-12:конт-Б:стеллаж-3:яч-7     # пересортица по снэпшоту
+oilfield find SN-88213                          # «где труба?» за секунду
+oilfield at  WH-01:ряд-А:стеллаж-1:яч-1          # что лежит в ячейке
+oilfield hist tube-01                           # вся биография единицы
+oilfield summary                                # карта кустов + потеряшки
+```
+
+Хранилище — JSON (`~/.oilfield/state.json`, ключи кладовщиков локально).
+CLI не требует интернета: подпись и очередь работают на кусте офлайн.
 
 ## Relation to the ecosystem
 
