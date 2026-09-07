@@ -1,8 +1,15 @@
 # Axis-Oilfield — Domain Specification
 
-> **Version:** 0.1 · **Status:** draft
+> **Version:** 0.2 · **Status:** implemented (core loop, offline, QR, PoI)
 > **Profile of:** [Axis Protocol](https://github.com/AntonGrid/Axis-protocol) v1
 > (overlay trust standard) · **Reference implementation:** [Axis Core](https://github.com/AntonGrid/Axis-core)
+
+> **Implemented (v0.2):** signed inventory snapshots · issue guards (double
+> issue, not-in-stock) · SKU mismatch on existing items · temperature band for
+> chemicals · lot expiry (FEFO) · lost-item detector · offline outbox + sync ·
+> `oilfield` CLI · QR labels · HTTP gateway + phone scanner (Ed25519 on
+> device) · PoI: site accuracy, demand profile, signed contributions,
+> rebalance signals · CSV exports for 1C. Tests: 36.
 
 ---
 
