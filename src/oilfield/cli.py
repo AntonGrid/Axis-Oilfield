@@ -231,6 +231,12 @@ def cmd_keeper(store, args) -> None:
         store.save()
         print(f"✅ кладовщик «{args.name}» создан")
         print(f"   публичный ключ: {entry['public_key_b64']}")
+    elif args.action == "seed":
+        entry = store.data["keepers"].get(args.name)
+        if not entry:
+            raise SystemExit(f"❌ кладовщик «{args.name}» не найден")
+        print("⚠ СЕКРЕТ! Вставляй только в свой сканер (web/index.html):")
+        print(entry["seed_b64"])
     else:
         for name, e in store.data["keepers"].items():
             print(f"  {name}: {e['public_key_b64'][:20]}…")
@@ -363,6 +369,56 @@ def cmd_summary(store, args) -> None:
         print(f"  ⚠ потеряшка: {l['item_id']} {l['sku']} — без движений {l['days_since']} дн.")
 
 
+# ─────────────────────────────── QR labels ──────────────────────────────────
+
+def _outdir(args) -> str:
+    return getattr(args, "out", None) or "qr_out"
+
+
+def cmd_qr_items(store, args) -> None:
+    store.load()
+    reg = store.rebuild()
+    from oilfield.qrkit import item_label, write_labels
+
+    items = list(reg.items.values())
+    names = [it.item_id for it in items]
+    paths = write_labels([item_label(it) for it in items], _outdir(args), names)
+    for p in paths:
+        print(f"  🖨 {p}")
+    print(f"  всего этикеток: {len(paths)}")
+
+
+def cmd_qr_locs(store, args) -> None:
+    store.load()
+    reg = store.rebuild()
+    from oilfield.qrkit import location_label, write_labels
+
+    locs = sorted(reg.locations)
+    if args.site:
+        locs = [l for l in locs if l.startswith(args.site + ":")]
+    paths = write_labels([location_label(l) for l in locs], _outdir(args), [f"loc_{l}" for l in locs])
+    for p in paths:
+        print(f"  🖨 {p}")
+    print(f"  всего этикеток: {len(paths)}")
+
+
+def cmd_qr_item(store, args) -> None:
+    store.load()
+    reg = store.rebuild()
+    from oilfield.qrkit import item_label, write_labels
+
+    item = _item(reg, args.item_id)
+    paths = write_labels([item_label(item)], _outdir(args), [item.item_id])
+    print(f"  🖨 {paths[0]}")
+
+
+def cmd_serve(store, args) -> None:
+    from oilfield.gateway import serve
+
+    serve(store.path, host=args.host, port=args.port)
+
+
+
 # ─────────────────────────────── parser & main ──────────────────────────────
 
 def build_parser() -> argparse.ArgumentParser:
@@ -409,6 +465,7 @@ def build_parser() -> argparse.ArgumentParser:
     a = sp.add_subparsers(dest="action", required=True)
     ap = a.add_parser("add"); ap.add_argument("name"); ap.set_defaults(fn=cmd_keeper)
     ap = a.add_parser("list"); ap.set_defaults(fn=cmd_keeper)
+    ap = a.add_parser("seed"); ap.add_argument("name"); ap.set_defaults(fn=cmd_keeper)
 
     for name, fn, target in [("receive", cmd_receive, "приёмка (куда)"),
                              ("move", cmd_move, "переместить (куда)"),
@@ -431,6 +488,22 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("at", help="что лежит в ячейке").add_argument("location")
     sub.add_parser("hist", help="история позиции").add_argument("item_id")
     sub.add_parser("summary", help="карта кустов + потеряшки").add_argument("--days", type=int)
+
+    sp = sub.add_parser("qr", help="QR-этикетки для печати")
+    a = sp.add_subparsers(dest="action", required=True)
+    ap = a.add_parser("items", help="этикетки всех позиций"); ap.add_argument("--out", default=None)
+    ap.set_defaults(fn=cmd_qr_items)
+    ap = a.add_parser("item", help="этикетка одной позиции")
+    ap.add_argument("item_id"); ap.add_argument("--out", default=None)
+    ap.set_defaults(fn=cmd_qr_item)
+    ap = a.add_parser("locs", help="этикетки ячеек")
+    ap.add_argument("--site", default=None); ap.add_argument("--out", default=None)
+    ap.set_defaults(fn=cmd_qr_locs)
+
+    sp = sub.add_parser("serve", help="HTTP-шлюз для сканов с телефона")
+    sp.add_argument("--host", default="0.0.0.0"); sp.add_argument("--port", type=int, default=8080)
+    sp.set_defaults(fn=cmd_serve)
+
     leaf = {"report": cmd_report, "find": cmd_find, "at": cmd_loc,
             "hist": cmd_hist, "summary": cmd_summary}
     for name, parser in sub.choices.items():

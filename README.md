@@ -48,7 +48,11 @@ Axis-Oilfield/
 │   ├── custody.py            # registry: apply events, «куст map», anomalies,
 │   │                         #   signed inventory snapshots, reports
 │   ├── sync.py               # offline outbox: sign at the pad, sync later
-│   └── keeper.py             # Axis Core bridge: Storekeeper (sign) / Gateway (verify)
+│   ├── keeper.py             # Axis Core bridge: Storekeeper (sign) / Gateway (verify)
+│   ├── qrkit.py              # QR label generation for items & locations
+│   ├── cli.py                # the `oilfield` command (see below)
+│   └── gateway.py            # HTTP gateway for phone scanner (web/)
+├── web/                      # phone scanner UI (camera QR + offline outbox)
 ├── examples/
 │   ├── oilfield_inventory.py # end-to-end demo on Axis Core (Ed25519 signing)
 │   └── oilfield_daily.py     # a real pad-storekeeper day (offline-first + sync)
@@ -104,6 +108,31 @@ oilfield summary                                # карта кустов + по
 
 Хранилище — JSON (`~/.oilfield/state.json`, ключи кладовщиков локально).
 CLI не требует интернета: подпись и очередь работают на кусте офлайн.
+
+## QR-этикетки, шлюз и сканер с телефона
+
+```bash
+# 1. Печать этикеток (PNG, готовы к печати)
+oilfield qr items                 # все позиции → qr_out/
+oilfield qr locs --site WH-01     # ячейки склада
+oilfield qr item tube-01          # одна позиция
+
+# 2. Секретный ключ кладовщика — для импорта в сканер на телефоне
+oilfield keeper seed "Иван"       # ⚠ секрет; вставляется один раз в web-сканер
+
+# 3. Шлюз на ПК склада (в локальной сети)
+oilfield serve --port 8080        # http://<IP-ПК>:8080 — страница сканера
+```
+
+Сканер (`web/index.html`) работает на телефоне в той же сети:
+- сохраняет ключ кладовщика один раз (localStorage);
+- сканирует QR предмета и QR ячейки;
+- **подписывает событие Ed25519 прямо на телефоне** (tweetnacl, формат
+  идентичен Axis Core — проверено кросс-подписью) и шлёт на шлюз;
+- без связи кладёт события в офлайн-очередь и синхронизирует позже.
+
+Проверено end-to-end: `POST /event` с подписью → `accepted: true`;
+повтор того же события → `replay` отклонён.
 
 ## Relation to the ecosystem
 

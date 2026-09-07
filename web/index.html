@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Axis-Oilfield · склад МТР</title>
+<style>
+  :root { --bg:#0f1420; --panel:#1a2130; --line:#2a3446; --txt:#dfe7f3;
+          --acc:#4fd1c5; --ok:#38b26b; --bad:#e05252; --muted:#8fa0b8; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+         font:16px/1.45 system-ui, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width:560px; margin:0 auto; padding:14px; }
+  h1 { font-size:20px; margin:6px 0 2px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:12px; }
+  .card { background:var(--panel); border:1px solid var(--line);
+          border-radius:12px; padding:14px; margin-bottom:12px; }
+  .card h2 { font-size:14px; margin:0 0 10px; color:var(--acc);
+             text-transform:uppercase; letter-spacing:.4px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:8px 0 4px; }
+  input, select { width:100%; background:#0b0f18; color:var(--txt);
+                  border:1px solid var(--line); border-radius:8px;
+                  padding:10px 12px; font-size:16px; }
+  .row { display:flex; gap:8px; }
+  .row > * { flex:1; }
+  button { border:0; border-radius:8px; padding:11px 12px; font-size:15px;
+           cursor:pointer; background:#223; color:var(--txt); margin-top:8px; }
+  button.primary { background:var(--acc); color:#06231f; font-weight:600; width:100%; }
+  button.ghost { background:var(--line); }
+  #log { font:12px/1.5 ui-monospace, monospace; color:var(--muted);
+         white-space:pre-wrap; word-break:break-word; min-height:40px; }
+  .ok { color:var(--ok);} .bad { color:var(--bad);}
+  #reader { width:100%; border-radius:10px; overflow:hidden; background:#000; }
+  .status { display:flex; gap:8px; align-items:center; font-size:13px; }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--bad); }
+  .dot.on { background:var(--ok); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Axis-Oilfield 🛢</h1>
+  <div class="sub">склад МТР · подписанные события · Ed25519</div>
+  <div class="status" id="health"><span class="dot"></span><span>проверка связи…</span></div>
+
+  <div class="card" id="keeperCard">
+    <h2>Кладовщик</h2>
+    <label>Секретный ключ (seed base64) — с ПК: <code>oilfield keeper seed "Иван"</code></label>
+    <input id="seedInput" type="text" autocomplete="off" placeholder="вставьте seed…">
+    <button class="ghost" id="saveKeeper">Сохранить ключ на телефоне</button>
+    <div class="sub" id="pubOut"></div>
+  </div>
+
+  <div class="card">
+    <h2>Событие</h2>
+    <label>Действие</label>
+    <select id="actType">
+      <option value="receive">Приёмка (receive)</option>
+      <option value="store">Перемещение (store)</option>
+      <option value="issue">Выдача (issue)</option>
+      <option value="return">Возврат (return)</option>
+    </select>
+    <label>Предмет (скан QR на трубе/единице)</label>
+    <div class="row">
+      <input id="itemId" placeholder="item id">
+      <button class="ghost" id="scanItem">📷</button>
+    </div>
+    <div class="row">
+      <input id="skuField" placeholder="sku (авто из QR)" readonly>
+      <input id="certsField" placeholder="certs (авто)" readonly>
+    </div>
+    <label>Куда / адрес / скважина (скан QR ячейки)</label>
+    <div class="row">
+      <input id="toField" placeholder="WH-01:ряд-А:яч-1 или well-8">
+      <button class="ghost" id="scanLoc">📷</button>
+    </div>
+    <button class="primary" id="send">Подписать и отправить</button>
+  </div>
+
+  <div id="reader"></div>
+
+  <div class="card">
+    <h2>Офлайн-очередь</h2>
+    <div class="row">
+      <button class="ghost" id="syncBtn">Синхронизировать (N)</button>
+    </div>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script src="vendor/nacl.min.js"></script>
+<script src="vendor/html5-qrcode.min.js"></script>
+<script>
+"use strict";
+const LS_SEED = "of_seed", LS_OUT = "of_outbox", LS_NONCE = "of_nonce";
+const $ = id => document.getElementById(id);
+
+function b64(u8){ let s=""; for(const b of u8) s+=String.fromCharCode(b);
+  return btoa(s); }
+function unb64(s){ const raw=atob(s); const u=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) u[i]=raw.charCodeAt(i); return u; }
+function canon(v){
+  if(v===null||typeof v!=="object") return JSON.stringify(v);
+  if(Array.isArray(v)) return "["+v.map(canon).join(",")+"]";
+  const keys=Object.keys(v).sort();
+  return "{"+keys.map(k=>JSON.stringify(k)+":"+canon(v[k])).join(",")+"}";
+}
+function log(msg, cls){ const el=$("log");
+  el.innerHTML=(cls?"<span class='"+cls+"'>":"")+msg+(cls?"</span>":"")+"\n"+el.innerHTML; }
+function setHealth(on,msg){ const d=$("health");
+  d.querySelector(".dot").classList.toggle("on",on);
+  d.lastElementChild.textContent=msg; }
+
+// ── keeper ──────────────────────────────────────────────────────────────────
+function loadKeeper(){
+  const seed=localStorage.getItem(LS_SEED)||"";
+  if(!seed) return null;
+  try{
+    const kp=nacl.sign.keyPair.fromSeed(unb64(seed));
+    return {seed, pub:b64(kp.publicKey), sk:kp.secretKey};
+  }catch(e){ return null; }
+}
+function saveKeeper(){
+  const v=$("seedInput").value.trim();
+  if(!v) return log("вставьте seed", "bad");
+  localStorage.setItem(LS_SEED, v);
+  const k=loadKeeper();
+  $("pubOut").textContent="публичный ключ: "+(k?k.pub:"—");
+  log("ключ кладовщика сохранён локально");
+}
+$("saveKeeper").onclick=saveKeeper;
+(function initKeeper(){ const seed=localStorage.getItem(LS_SEED);
+  if(seed){ $("seedInput").value=seed; const k=loadKeeper();
+    if(k) $("pubOut").textContent="публичный ключ: "+k.pub; } })();
+
+// ── camera scanner ──────────────────────────────────────────────────────────
+let scanner=null;
+async function startScan(target){
+  if(!window.Html5Qrcode){ log("нет html5-qrcode","bad"); return; }
+  if(scanner){ try{ scanner.stop(); }catch(e){} scanner=null; }
+  $("reader").innerHTML="";
+  scanner=new Html5Qrcode("reader");
+  try{
+    await scanner.start({facingMode:"environment"},
+      {fps:8, qrbox:{width:240,height:240}},
+      txt=>{ try{
+          const p=JSON.parse(txt);
+          if(target==="item" && p.of==="item"){
+            $("itemId").value=p.id||""; $("skuField").value=p.sku||"";
+            $("certsField").value=p.certs||"";
+            log("предмет: "+p.id+" "+p.sku+" серия "+(p.serial||""));
+          } else if(target==="loc" && p.of==="loc"){
+            $("toField").value=p.id||""; log("ячейка: "+p.id);
+          } else { log("не тот QR ("+p.of+")","bad"); return; }
+          if(scanner){ scanner.stop(); scanner=null; }
+        }catch(e){ log("QR не распознан","bad"); } });
+  }catch(e){ log("камера недоступна","bad"); }
+}
+$("scanItem").onclick=()=>startScan("item");
+$("scanLoc").onclick=()=>startScan("loc");
+
+// ── signing & sending ───────────────────────────────────────────────────────
+function nextNonce(){
+  const n=(parseInt(localStorage.getItem(LS_NONCE)||"0",10))+1;
+  localStorage.setItem(LS_NONCE,String(n)); return String(n);
+}
+function buildEvent(){
+  const k=loadKeeper(); if(!k){ log("сначала сохраните ключ кладовщика","bad"); return null; }
+  const itemId=$("itemId").value.trim();
+  if(!itemId){ log("отсканируйте предмет","bad"); return null; }
+  const to=$("toField").value.trim();
+  if(!to){ log("укажите адрес/скважину","bad"); return null; }
+  const payload={event_type:$("actType").value, item_id:itemId, sku:$("skuField").value||"",
+                 from:"", to, qty:1,
+                 certificates:($("certsField").value||"").split(",").filter(Boolean)};
+  const body={algo:"ed25519", device_id:k.pub, nonce:nextNonce(),
+              timestamp:new Date().toISOString(), payload};
+  const sig=nacl.sign.detached(new TextEncoder().encode(canon(body)), k.sk);
+  payload.signature=b64(sig);
+  return body;
+}
+async function sendEvent(body){
+  const res=await fetch("/event",{method:"POST",
+    headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  return res.json();
+}
+$("send").onclick=async()=>{
+  const body=buildEvent(); if(!body) return;
+  try{
+    const r=await sendEvent(body);
+    if(r.accepted) log("✅ принято: "+body.payload.event_type+" "+body.payload.item_id,"ok");
+    else log("⛔ отклонено: "+r.reason,"bad");
+  }catch(e){
+    const out=JSON.parse(localStorage.getItem(LS_OUT)||"[]");
+    out.push(body); localStorage.setItem(LS_OUT, JSON.stringify(out));
+    log("📴 нет связи — в офлайн-очередь ("+out.length+")","bad");
+    $("syncBtn").textContent="Синхронизировать ("+out.length+")";
+  }
+};
+$("syncBtn").onclick=async()=>{
+  const out=JSON.parse(localStorage.getItem(LS_OUT)||"[]");
+  if(!out.length){ log("очередь пуста"); return; }
+  let ok=0,bad=0;
+  for(const ev of out){
+    try{ const r=await sendEvent(ev); r.accepted?ok++:(bad++,log("⛔ "+r.reason,"bad")); }
+    catch(e){ bad++; }
+  }
+  if(bad===0){ localStorage.setItem(LS_OUT,"[]"); log("✅ синхронизировано: "+ok,"ok"); }
+  else log("⚠ доставлено "+ok+", осталось "+bad,"bad");
+};
+(function initOut(){
+  const n=JSON.parse(localStorage.getItem(LS_OUT)||"[]").length;
+  $("syncBtn").textContent="Синхронизировать ("+n+")";
+})();
+
+// ── health ──────────────────────────────────────────────────────────────────
+fetch("/health").then(r=>r.json()).then(d=>setHealth(true,"шлюз: ок · позиций "+d.items))
+  .catch(()=>setHealth(false,"шлюз недоступен — работа офлайн"));
+</script>
+</body>
+</html>
+
